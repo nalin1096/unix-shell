@@ -16,12 +16,18 @@ int shelly_exit (char **args);
 int shelly_history (char **args);
 int shelly_easter_eggs (char **args);
 
-char *builtin_str[] = {"cd","help","history","exit","easter_eggs"};
+char **cmd_history;
 
-int (*builtin_func[]) (char**) = {&shelly_cd,&shelly_help,&shelly_exit,&shelly_history,&shelly_easter_eggs};
+char *builtin_str[] = {"cd","help","history","exit"};
+
+int (*builtin_func[]) (char**) = {&shelly_cd,&shelly_help,&shelly_history,&shelly_exit};
 
 int num_builtins () {
 	return sizeof(builtin_str) / sizeof(char*);
+}
+
+int num_history () {
+	return sizeof(cmd_history) / sizeof(char*);
 }
 
 int shelly_cd (char **args) {
@@ -29,10 +35,30 @@ int shelly_cd (char **args) {
 		fprintf(stderr,"shelly: excpected argument to \"cd\"\n");
 	}
 	else {
-		if (chdir(args[1]==-1)) {
+		if (chdir(args[1]) != 0) {
 			perror("shelly");
 			printf("\n");
 		}
+	}
+	return 1;
+}
+
+int shelly_help (char **args) {
+	printf("shelly by Nalin Gupta\n");
+	printf("The following are the builtin functions:\n");
+	for (int i=0;i<num_builtins();i++) {
+		printf(" %s\n",builtin_str[i]);
+	}
+	return 1;
+}
+
+int shelly_exit (char **args) {
+	return 0;
+}
+
+int shelly_history (char **args) {
+	for (int i=0;i<num_history();i++) {
+		printf(" %d  %s\n",i+1,cmd_history[i]);
 	}
 	return 1;
 }
@@ -125,7 +151,29 @@ int shelly_execute (char **args) {
 	if (args[0] == NULL) {
 		return 1;
 	}
+
+	for (int i=0;i<num_builtins();i++) {
+		if (strcmp(args[0],builtin_str[i])==0){
+			return (*builtin_func[i])(args);
+		}
+	}
+
 	return shelly_launch(args);
+}
+
+void add_history (char *line) {
+	static int pos = 0;
+	static int buffer = buffer_size;
+	if (pos >= buffer) {
+		buffer += buffer;
+		cmd_history = realloc(cmd_history,buffer*sizeof(char*));
+
+		if (!cmd_history) {
+			fprintf(stderr, "shelly: Allocation error\n");
+		}
+	}
+	cmd_history[pos] = line;
+	pos++;
 }
 
 void shelly_loop () {
@@ -138,6 +186,7 @@ void shelly_loop () {
 	do {
 		printf("shelly: %s$ ", get_username());
 		line = shelly_read_line();
+		add_history (line);
 		args = shelly_split_line(line);
 		status = shelly_execute(args);
 
@@ -146,10 +195,16 @@ void shelly_loop () {
 	} while(status);
 }
 
-int main(int argc, char *argv[]) {
-	if ((int)getchar()==72) {
-		printf("hi");
+void start_logging () {
+	cmd_history = malloc(buffer_size*sizeof(char*));
+	if (!cmd_history) {
+		fprintf(stderr, "shelly: Allocation error\n");
 	}
+	return;
+}
+
+int main(int argc, char *argv[]) {
+	start_logging();
 	shelly_loop();
 	return 0;
 }
