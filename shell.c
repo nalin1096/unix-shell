@@ -4,11 +4,16 @@
 #include <signal.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <pwd.h>
+#include <fcntl.h>
+#include <sys/types.h>
 
 #define buffer_size 1024
 #define token_size 64
 #define token_delim " \n\t\r\a"
+#define IN 1
+#define OUT 2
 
 int shelly_cd (char **args);
 int shelly_help (char **args);
@@ -16,7 +21,10 @@ int shelly_exit (char **args);
 int shelly_history (char **args);
 int shelly_easter_eggs (char **args);
 
-char **cmd_history;
+int redirect;
+int his_pos;
+
+char cmd_history[500][100];
 
 char *builtin_str[] = {"cd","help","history","exit"};
 
@@ -24,10 +32,6 @@ int (*builtin_func[]) (char**) = {&shelly_cd,&shelly_help,&shelly_history,&shell
 
 int num_builtins () {
 	return sizeof(builtin_str) / sizeof(char*);
-}
-
-int num_history () {
-	return sizeof(cmd_history) / sizeof(char*);
 }
 
 int shelly_cd (char **args) {
@@ -57,10 +61,19 @@ int shelly_exit (char **args) {
 }
 
 int shelly_history (char **args) {
-	for (int i=0;i<num_history();i++) {
-		printf(" %d  %s\n",i+1,cmd_history[i]);
+	int in=0;
+	if (his_pos>500) {
+		in = his_pos - 500;
+	}
+	for (int i=in;i<his_pos-1;i++) {
+		printf(" %d  %s",i+1,cmd_history[i]);
 	}
 	return 1;
+}
+
+void add_history (char *line) {
+	strcpy(cmd_history[his_pos], line);
+	his_pos++;
 }
 
 void signal_handler (int sig) {
@@ -97,6 +110,8 @@ char **shelly_split_line (char *line) {
 	int pos =0;
 	char **tokens = malloc(buffer * sizeof(char*));
 	char *token;
+
+	redirect = 0;
 
 	if (!tokens) {
 		fprintf(stderr, "shelly: Allocation error\n");
@@ -161,21 +176,6 @@ int shelly_execute (char **args) {
 	return shelly_launch(args);
 }
 
-void add_history (char *line) {
-	static int pos = 0;
-	static int buffer = buffer_size;
-	if (pos >= buffer) {
-		buffer += buffer;
-		cmd_history = realloc(cmd_history,buffer*sizeof(char*));
-
-		if (!cmd_history) {
-			fprintf(stderr, "shelly: Allocation error\n");
-		}
-	}
-	cmd_history[pos] = line;
-	pos++;
-}
-
 void shelly_loop () {
 	char *line;
 	char **args;
@@ -195,16 +195,8 @@ void shelly_loop () {
 	} while(status);
 }
 
-void start_logging () {
-	cmd_history = malloc(buffer_size*sizeof(char*));
-	if (!cmd_history) {
-		fprintf(stderr, "shelly: Allocation error\n");
-	}
-	return;
-}
-
 int main(int argc, char *argv[]) {
-	start_logging();
+	his_pos = 0;
 	shelly_loop();
 	return 0;
 }
